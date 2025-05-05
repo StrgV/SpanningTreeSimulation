@@ -79,19 +79,15 @@ class Graph:
     def print_topology(self):
         print(f"Graph {self.name} {{")
         
-        # Print node IDs
         print("  // Node-IDs")
         for node in self.nodes:
             print(f"  {node.name} = {node.node_id};")
         
-        # Print links
         print("\n  // Links and costs")
         printed_links = set()
         for i in range(self.node_count):
             for j in range(self.node_count):
-                 # Only check links where cost > 0 and avoid duplicates/self-links visually
                 if self.nodes[i].links[j].kosten > 0 and i != j:
-                    # Create a unique key for the link pair
                     link_key = tuple(sorted((self.nodes[i].name, self.nodes[j].name)))
                     if link_key not in printed_links:
                         print(f"  {self.nodes[i].name} - {self.nodes[j].name} : {self.nodes[i].links[j].kosten};")
@@ -108,12 +104,11 @@ class GraphParser:
             
             in_graph = False
             graph = None
-            link_definitions = [] # Store links temporarily
-            
+            link_definitions = [] 
+
             for line in lines:
                 line = line.strip()
                 
-                # Skip empty lines, comments, and lines with just whitespace
                 if not line or line.startswith("//") or line.isspace():
                     continue
                 
@@ -400,10 +395,6 @@ def main():
     filename = "input.txt" 
     graph = GraphParser.parse_file(filename)
     
-    if graph.node_count == 0:
-         print("Graph loaded successfully, but contains no nodes.")
-         return
-
     print(f"Loaded graph '{graph.name}' with {graph.node_count} nodes.")
     graph.print_topology()
     
