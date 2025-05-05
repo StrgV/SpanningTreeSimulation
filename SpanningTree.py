@@ -184,9 +184,8 @@ class SpanningTreeSimulator:
             # Initialize the information received by node 'i' *from* node 'k'
             for k in range(self.graph.node_count):
                  if k < len(node.links) and self.graph.nodes[k].node_id is not None:
-                      # Simulate initial broadcast: k advertises itself as root with cost 0
                       node.links[k].root_id = self.graph.nodes[k].node_id
-                      node.links[k].sum_cost = 0
+                      node.links[k].sum_cost = 2
 
     # Spanning tree iteration for one node
     def sptree(self, node_idx: int):
@@ -195,61 +194,41 @@ class SpanningTreeSimulator:
         
         node = self.graph.nodes[node_idx]
         node.msg_cnt += 1
-        
-        # Find best path to root based on information from neighbors
-        # Start by assuming the current node itself is the best root option
-        best_root_id = node.node_id
-        best_path_cost = 0 
-        best_next_hop = node_idx  
 
-        for neighbor_idx in range(self.graph.node_count):
-            # Skip non-neighbors and self
-            if neighbor_idx == node_idx or self.graph.nodes[node_idx].links[neighbor_idx].cost == 0:
+        # Assume self for root; Format:(root_id, path_cost, advertising_node_id)
+        best_path_tuple = (node.node_id, 0, node.node_id) 
+        best_hop_idx = node_idx 
+
+        for possible_neighbor_idx in range(self.graph.node_count):
+            link_to_neighbor = node.links[possible_neighbor_idx]
+            if possible_neighbor_idx == node_idx or link_to_neighbor.cost == 0:
                 continue
-            
-            # Info received *from* neighbor_idx
-            received_link_info = node.links[neighbor_idx]
-            # Cost of the direct link *to* neighbor_idx
-            link_cost = self.graph.nodes[node_idx].links[neighbor_idx].cost
 
-            # Total cost to reach the root advertised by the neighbor
-            total_cost_via_neighbor = received_link_info.sum_cost + link_cost
-            
-            # Decision Logic:
-            # 1. Is the neighbor advertising a root with a lower ID?
-            if received_link_info.root_id < best_root_id:
-                best_root_id = received_link_info.root_id
-                best_path_cost = total_cost_via_neighbor
-                best_next_hop = neighbor_idx
-            # 2. Same root ID, but is the path through this neighbor shorter?
-            elif received_link_info.root_id == best_root_id and total_cost_via_neighbor < best_path_cost:
-                # best_root_id remains the same
-                best_path_cost = total_cost_via_neighbor
-                best_next_hop = neighbor_idx
-            # 3. Tie-breaking (optional but good practice): If root ID and cost are equal,
-            #    prefer the neighbor with the lower Node ID.
-            elif received_link_info.root_id == best_root_id and \
-                 total_cost_via_neighbor == best_path_cost and \
-                 self.graph.nodes[neighbor_idx].node_id < self.graph.nodes[best_next_hop].node_id:
-                 best_next_hop = neighbor_idx
+            neighbor_node = self.graph.nodes[possible_neighbor_idx]
 
+            # Calculate path info if using neighbor
+            total_cost_via_neighbor = link_to_neighbor.sum_cost + link_to_neighbor.cost
+            # Create the tuple representing the path offered by this neighbor
+            current_path_tuple = (link_to_neighbor.root_id, total_cost_via_neighbor, neighbor_node.node_id)
 
-        # Update the node's chosen next hop
-        node.next_hop = best_next_hop
+            if current_path_tuple < best_path_tuple:
+                best_path_tuple = current_path_tuple
+                best_hop_idx = possible_neighbor_idx
+
+        # Update and Broadcast
+        node.next_hop = best_hop_idx
+
+        my_advertised_root_id = best_path_tuple[0]
+        my_advertised_cost = best_path_tuple[1] 
+
+        for possible_neighbor_idx in range(self.graph.node_count):
+            # Check if possible_neighbor_idx is actually a neighbor
+            if possible_neighbor_idx != node_idx and node.links[possible_neighbor_idx].cost > 0:
+                neighbor_node = self.graph.nodes[possible_neighbor_idx]
+                if node_idx < len(neighbor_node.links):
+                    neighbor_node.links[node_idx].root_id = my_advertised_root_id
+                    neighbor_node.links[node_idx].sum_cost = my_advertised_cost
         
-        # Broadcast this node's *new* understanding of the path to the root to its neighbors
-        # The info sent is: ("My chosen root is best_root_id, and my cost to reach it is best_path_cost")
-        my_advertised_root_id = best_root_id
-        my_advertised_cost = best_path_cost
-
-        for neighbor_idx in range(self.graph.node_count):
-             # Check if neighbor_idx is actually a neighbor
-            if neighbor_idx != node_idx and self.graph.nodes[node_idx].links[neighbor_idx].cost > 0:
-                # Update the information that neighbor_idx *receives from* node_idx
-                neighbor_node = self.graph.nodes[neighbor_idx]
-                neighbor_node.links[node_idx].root_id = my_advertised_root_id
-                neighbor_node.links[node_idx].sum_cost = my_advertised_cost
-    
     # Spanning tree simulation
     def simulate(self, iterations: int, debug_interval: Optional[int] = None) -> bool:
         self.initialize_nodes_to_be_root()
@@ -284,15 +263,15 @@ class SpanningTreeSimulator:
         expected_root_id = expected_root_node.node_id
 
         for i, node in enumerate(self.graph.nodes):
-            # 1. Check if the root node points to itself
+            # Check if the root node points to itself
             if node.node_id == expected_root_id:
                 if node.next_hop != i:
                     return False
-            # 2. Check if non-root nodes point somewhere else
+            # Check if non-root nodes point somewhere else
             elif node.next_hop == i:
                  return False
 
-            # 3. Check if all nodes agree on the root ID based on their next hop's advertisement
+            # Check if all nodes agree on the root ID based on their next hop's advertisement
             current_best_root_id = node.node_id
             current_best_cost = 0
             if node.next_hop != i:
@@ -319,17 +298,12 @@ class SpanningTreeSimulator:
         print(f"\nSpanning-Tree of {self.graph.name} {{")
         print(f"  Root: {root_node.name};")
         
-        # Print all edges in the spanning tree (non-root nodes pointing to their next hop)
         print("  Edges:")
         for i in range(self.graph.node_count):
-            if i != root_idx: # Exclude the root node itself
+            if i != root_idx: 
                 node = self.graph.nodes[i]
-                # Ensure next_hop is valid before accessing
-                if 0 <= node.next_hop < self.graph.node_count:
-                     next_hop_node = self.graph.nodes[node.next_hop]
-                     print(f"  {node.name} - {next_hop_node.name};")
-                else:
-                     print(f"  Warning: Node {node.name} has invalid next_hop index {node.next_hop}")
+                next_hop_node = self.graph.nodes[node.next_hop]
+                print(f"  {node.name} - {next_hop_node.name};")
 
         print("}")
 
@@ -353,10 +327,6 @@ def main():
         simulator.print_spanning_tree()
     else:
         print("\nSpanning tree algorithm did NOT converge after {iterations} iterations.")
-        print("Check the final state above. Possible issues: insufficient iterations, graph partitioning, or subtle bug.")
-        # Still try to print the tree, it might be partially correct
-        simulator.print_spanning_tree()
-
 
 if __name__ == "__main__":
     main()

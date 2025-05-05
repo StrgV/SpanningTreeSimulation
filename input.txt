@@ -1,7 +1,7 @@
 Graph mygraph {
   // Node-IDs
   A = 5;
-  B = 1;
+  B = 10;
   C = 3;
   D = 7;
   E = 6;
