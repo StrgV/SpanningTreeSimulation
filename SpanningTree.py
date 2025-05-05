@@ -78,11 +78,9 @@ class Graph:
     
     def print_topology(self):
         print(f"Graph {self.name} {{")
-        
         print("  // Node-IDs")
         for node in self.nodes:
             print(f"  {node.name} = {node.node_id};")
-        
         print("\n  // Links and costs")
         printed_links = set()
         for i in range(self.node_count):
@@ -92,7 +90,6 @@ class Graph:
                     if link_key not in printed_links:
                         print(f"  {self.nodes[i].name} - {self.nodes[j].name} : {self.nodes[i].links[j].kosten};")
                         printed_links.add(link_key)
-        
         print("}")
 
 class GraphParser:
@@ -185,7 +182,7 @@ class SpanningTreeSimulator:
             node = self.graph.nodes[i]
             node.next_hop = i  
             node.msg_cnt = 0
-            # Initialize the information *received* by node 'i' *from* node 'k'
+            # Initialize the information received by node 'i' *from* node 'k'
             for k in range(self.graph.node_count):
                  if k < len(node.links) and self.graph.nodes[k].node_id is not None:
                       # Simulate initial broadcast: k advertises itself as root with cost 0
@@ -254,15 +251,14 @@ class SpanningTreeSimulator:
                 neighbor_node.links[node_idx].root_id = my_advertised_root_id
                 neighbor_node.links[node_idx].summe_kosten = my_advertised_cost
     
+    # Spanning tree simulation
     def simulate(self, iterations: int, debug_interval: Optional[int] = None) -> bool:
-        """Runs the STP simulation."""
         self.initialize_nodes_to_be_root()
         
         if self.graph.node_count == 0:
              print("Graph is empty, nothing to simulate.")
-             return True # Empty graph is trivially converged
+             return True
 
-        # Seed random number with system time
         random.seed(time.time())
         
         # Run algorithm iterations
@@ -270,20 +266,13 @@ class SpanningTreeSimulator:
             node_idx = random.randint(0, self.graph.node_count - 1)
             self.sptree(node_idx)
 
-            if debug_interval and (i + 1) % debug_interval == 0:
-                 print(f"\n--- Iteration {i+1} ---")
-                 self.print_current_state()
-
-            # Optional: Check for convergence early (can slow down simulation)
-            # if i > self.graph.node_count * 2 and self._is_converged(): # Check after some initial churn
-            #     print(f"Converged early after {i+1} iterations.")
-            #     return True
+            # Check for convergence early
+            if i > self.graph.node_count * 2 and self._is_converged(): # Check after some initial churn
+                 print(f"Converged early after {i+1} iterations.")
+                 return True
 
         # Final convergence check after all iterations
         converged = self._is_converged()
-        if debug_interval:
-             print("\n--- Final State ---")
-             self.print_current_state()
         return converged
 
     def _is_converged(self) -> bool:
@@ -324,22 +313,6 @@ class SpanningTreeSimulator:
                  return False
 
         return True
-
-    def print_current_state(self):
-         """Prints the current next_hop and perceived root for each node."""
-         print("Node States:")
-         for i, node in enumerate(self.graph.nodes):
-              next_hop_node = self.graph.nodes[node.next_hop]
-              # Determine perceived root ID based on current state
-              perceived_root_id = node.node_id
-              perceived_cost = 0
-              if node.next_hop != i:
-                   received_info = node.links[node.next_hop]
-                   perceived_root_id = received_info.root_id
-                   perceived_cost = received_info.summe_kosten + node.links[node.next_hop].kosten
-
-              print(f"  {node.name}({node.node_id}): next_hop -> {next_hop_node.name}({next_hop_node.node_id}), believes root={perceived_root_id} (cost={perceived_cost}), msg_cnt={node.msg_cnt}")
-
 
     def print_spanning_tree(self):
         """Prints the calculated spanning tree."""
@@ -386,7 +359,7 @@ def main():
     # Run simulation
     simulator = SpanningTreeSimulator(graph)
     # Increase iterations significantly for robustness, especially with random selection
-    iterations = graph.node_count * 50
+    iterations = graph.node_count * 10
     debug_interval = iterations // 10 # Print state 10 times during simulation
 
     print(f"\nStarting simulation for {iterations} iterations...")
