@@ -104,7 +104,6 @@ class GraphParser:
             
             in_graph = False
             graph = None
-            link_definitions = [] 
 
             for line in lines:
                 line = line.strip()
@@ -136,7 +135,7 @@ class GraphParser:
                             print(f"Invalid node ID format: {node_id_str}")
                             continue
 
-                        if not node_name or not node_name[0].isalpha():
+                        if not node_name or not node_name[0].isalpha() or len(node_name) > MAX_IDENT:
                             print(f"Invalid node name: {node_name}")
                             continue
                         
@@ -163,14 +162,8 @@ class GraphParser:
                         if cost <= 0 or cost > MAX_KOSTEN:
                             print(f"Invalid link cost value: {cost}")
                             continue
-                        
-                        link_definitions.append((node1_name, node2_name, cost))
 
-            # After parsing all nodes, add the links
-            if graph:
-                for node1, node2, cost in link_definitions:
-                    if not graph.add_link(node1, node2, cost):
-                         print(f"Failed to add link {node1}-{node2} after parsing.")
+                        graph.add_link(node1_name, node2_name, cost)
 
             return graph
         
