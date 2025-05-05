@@ -183,22 +183,14 @@ class SpanningTreeSimulator:
              return
         for i in range(self.graph.node_count):
             node = self.graph.nodes[i]
-            node.next_hop = i  # Initially, each node thinks it's the root
+            node.next_hop = i  
             node.msg_cnt = 0
             # Initialize the information *received* by node 'i' *from* node 'k'
             for k in range(self.graph.node_count):
-                 # Check if link exists (cost > 0) before initializing received info
-                 # Need to check both directions as add_link sets both
                  if k < len(node.links) and self.graph.nodes[k].node_id is not None:
                       # Simulate initial broadcast: k advertises itself as root with cost 0
                       node.links[k].root_id = self.graph.nodes[k].node_id
                       node.links[k].summe_kosten = 0
-                 elif k < len(node.links):
-                      # Handle cases where a node might have been created but ID not set?
-                      # Or link list size mismatch - should not happen with corrected append_node
-                      node.links[k].root_id = MAX_NODE_ID + 1 # Invalid ID
-                      node.links[k].summe_kosten = MAX_KOSTEN + 1 # Invalid cost
-
 
     def sptree(self, node_idx: int):
         """Performs one STP step for the given node."""
