@@ -10,9 +10,9 @@ MAX_NODE_ID = 10000
 
 class Link:
     def __init__(self):
-        self.kosten = 0
+        self.cost = 0
         self.root_id = 0
-        self.summe_kosten = 0
+        self.sum_cost = 0
 
 class Node:
     def __init__(self, name: str, node_id: int):
@@ -38,21 +38,20 @@ class Graph:
         return -1
     
     def append_node(self, name: str, node_id: int) -> int:
+        # Check if node exists already
         if self.get_index(name) != -1:
-            # Node already exists
             return self.node_count
         
-        # Create new node
         new_node = Node(name, node_id)
         
-        # Initialize links for existing nodes (add column)
+        # Initialize links for existing nodes (column)
         for node in self.nodes:
             node.add_link()
-        # Initialize links for new node (add row)
+        # Initialize links for new node (row)
         for _ in range(self.node_count):
              new_node.add_link()
         
-        # Add the node's link to itself (diagonal in matrix)
+        # Add the nodes link to itself
         new_node.add_link()
         
         self.nodes.append(new_node)
@@ -72,8 +71,8 @@ class Graph:
              print(f"Error: Link index out of bounds for {from_name}-{to_name}.")
              return False
 
-        self.nodes[from_idx].links[to_idx].kosten = cost
-        self.nodes[to_idx].links[from_idx].kosten = cost
+        self.nodes[from_idx].links[to_idx].cost = cost
+        self.nodes[to_idx].links[from_idx].cost = cost
         return True
     
     def print_topology(self):
@@ -85,10 +84,10 @@ class Graph:
         printed_links = set()
         for i in range(self.node_count):
             for j in range(self.node_count):
-                if self.nodes[i].links[j].kosten > 0 and i != j:
+                if self.nodes[i].links[j].cost > 0 and i != j:
                     link_key = tuple(sorted((self.nodes[i].name, self.nodes[j].name)))
                     if link_key not in printed_links:
-                        print(f"  {self.nodes[i].name} - {self.nodes[j].name} : {self.nodes[i].links[j].kosten};")
+                        print(f"  {self.nodes[i].name} - {self.nodes[j].name} : {self.nodes[i].links[j].cost};")
                         printed_links.add(link_key)
         print("}")
 
@@ -187,34 +186,34 @@ class SpanningTreeSimulator:
                  if k < len(node.links) and self.graph.nodes[k].node_id is not None:
                       # Simulate initial broadcast: k advertises itself as root with cost 0
                       node.links[k].root_id = self.graph.nodes[k].node_id
-                      node.links[k].summe_kosten = 0
+                      node.links[k].sum_cost = 0
 
+    # Spanning tree iteration for one node
     def sptree(self, node_idx: int):
-        """Performs one STP step for the given node."""
         if not (0 <= node_idx < self.graph.node_count):
             return
         
         node = self.graph.nodes[node_idx]
         node.msg_cnt += 1
         
-        # Find best path to root based on information *received* from neighbors
+        # Find best path to root based on information from neighbors
         # Start by assuming the current node itself is the best root option
         best_root_id = node.node_id
-        best_path_cost = 0 # Cost to reach the root (0 if self is root)
-        best_next_hop = node_idx  # Default to self
+        best_path_cost = 0 
+        best_next_hop = node_idx  
 
         for neighbor_idx in range(self.graph.node_count):
             # Skip non-neighbors and self
-            if neighbor_idx == node_idx or self.graph.nodes[node_idx].links[neighbor_idx].kosten == 0:
+            if neighbor_idx == node_idx or self.graph.nodes[node_idx].links[neighbor_idx].cost == 0:
                 continue
             
             # Info received *from* neighbor_idx
             received_link_info = node.links[neighbor_idx]
             # Cost of the direct link *to* neighbor_idx
-            link_cost = self.graph.nodes[node_idx].links[neighbor_idx].kosten
+            link_cost = self.graph.nodes[node_idx].links[neighbor_idx].cost
 
             # Total cost to reach the root advertised by the neighbor
-            total_cost_via_neighbor = received_link_info.summe_kosten + link_cost
+            total_cost_via_neighbor = received_link_info.sum_cost + link_cost
             
             # Decision Logic:
             # 1. Is the neighbor advertising a root with a lower ID?
@@ -245,11 +244,11 @@ class SpanningTreeSimulator:
 
         for neighbor_idx in range(self.graph.node_count):
              # Check if neighbor_idx is actually a neighbor
-            if neighbor_idx != node_idx and self.graph.nodes[node_idx].links[neighbor_idx].kosten > 0:
+            if neighbor_idx != node_idx and self.graph.nodes[node_idx].links[neighbor_idx].cost > 0:
                 # Update the information that neighbor_idx *receives from* node_idx
                 neighbor_node = self.graph.nodes[neighbor_idx]
                 neighbor_node.links[node_idx].root_id = my_advertised_root_id
-                neighbor_node.links[node_idx].summe_kosten = my_advertised_cost
+                neighbor_node.links[node_idx].sum_cost = my_advertised_cost
     
     # Spanning tree simulation
     def simulate(self, iterations: int, debug_interval: Optional[int] = None) -> bool:
@@ -288,44 +287,29 @@ class SpanningTreeSimulator:
             # 1. Check if the root node points to itself
             if node.node_id == expected_root_id:
                 if node.next_hop != i:
-                    # print(f"Debug: Root node {node.name} does not point to self (next_hop={node.next_hop})")
                     return False
             # 2. Check if non-root nodes point somewhere else
             elif node.next_hop == i:
-                 # print(f"Debug: Non-root node {node.name} points to self.")
                  return False
 
             # 3. Check if all nodes agree on the root ID based on their next hop's advertisement
-            #    This part is tricky because the 'received' info might lag slightly.
-            #    A better check focuses on the stability of next_hop pointers,
-            #    but for simplicity after enough iterations, we check advertised root.
-            #    Get the root ID this node *thinks* is the best based on its state
-            current_best_root_id = node.node_id # Assume self initially
+            current_best_root_id = node.node_id
             current_best_cost = 0
-            if node.next_hop != i: # If not pointing to self, use next hop's info
-                 # Info received *from* the next hop
+            if node.next_hop != i:
                  received_info = node.links[node.next_hop]
                  current_best_root_id = received_info.root_id
-                 # current_best_cost = received_info.summe_kosten + node.links[node.next_hop].kosten
 
             if current_best_root_id != expected_root_id:
-                 # print(f"Debug: Node {node.name} believes root is {current_best_root_id}, expected {expected_root_id}")
                  return False
 
         return True
 
+    # Print the finished spanning tree 
     def print_spanning_tree(self):
-        """Prints the calculated spanning tree."""
-        # Find root - the node pointing to itself
         root_idx = -1
         for i, node in enumerate(self.graph.nodes):
-            if node.next_hop == i: # The root node points to itself after convergence
+            if node.next_hop == i:
                 root_idx = i
-                # Optional: Verify it's the lowest ID node
-                min_id_node = min(self.graph.nodes, key=lambda n: n.node_id)
-                if node.node_id != min_id_node.node_id:
-                     print(f"Warning: Node {node.name} points to self but isn't lowest ID node ({min_id_node.name}). STP might not be fully converged or graph issue.")
-                break # Found the node pointing to itself
         
         if root_idx == -1:
             print("Error: No root node found (no node points to itself)! STP did not converge correctly.")
