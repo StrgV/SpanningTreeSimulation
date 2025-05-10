@@ -1,5 +1,5 @@
 Graph mygraph {
-  // Node-IDs
+  // Switch-IDs
   A = 5;
   B = 1;
   C = 3;
@@ -7,7 +7,7 @@ Graph mygraph {
   E = 6;
   F = 4;
 
-  // Links und zugeh. Kosten
+  // Links with costs
   A - B : 10;
   A - C : 10;
   B - D : 15;
