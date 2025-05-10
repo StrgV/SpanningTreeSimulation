@@ -62,10 +62,6 @@ class Graph:
         from_idx = self.get_index(from_name)
         to_idx = self.get_index(to_name)
         
-        if from_idx == -1 or to_idx == -1 or from_idx == to_idx:
-            print(f"Warning: Could not add link {from_name}-{to_name}. Indices: {from_idx}, {to_idx}")
-            return False
-        
         # Ensure link lists are long enough (should be handled by append_node)
         if to_idx >= len(self.nodes[from_idx].links) or from_idx >= len(self.nodes[to_idx].links):
              print(f"Error: Link index out of bounds for {from_name}-{to_name}.")
@@ -188,19 +184,8 @@ class SpanningTreeSimulator:
                       node.links[k].sum_cost = 2
 
     def _find_best_path(self, node_idx: int) -> Tuple[int, int, int]:
-        """
-        Determines the best path to the root from the perspective of node_idx.
-
-        Returns:
-            Tuple[int, int, int]: (best_root_id, best_path_cost, best_hop_idx)
-                                best_path_cost is the cost from node_idx to best_root_id.
-                                best_hop_idx is the index of the neighbor providing this path
-                                    (or node_idx if the node itself is the root/best option).
-        """
         node = self.graph.nodes[node_idx]
 
-        # Start by assuming the current node itself is the best root option
-        # Format: (root_id, path_cost, advertising_node_id for tie-breaking)
         best_path_tuple = (node.node_id, 0, node.node_id)
         best_hop_idx = node_idx # Default to self
 
@@ -303,8 +288,6 @@ class SpanningTreeSimulator:
                 return False
             # 3. Explicit check: Root must point to itself
             if node.node_id == expected_root_id and node.next_hop != i:
-                return False
-            elif node.node_id != expected_root_id and node.next_hop == i:
                 return False
 
         # If all nodes pass the checks
