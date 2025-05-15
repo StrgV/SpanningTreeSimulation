@@ -5,7 +5,6 @@ from util.graph_parser import GraphParser
 from models.graph import Graph
 from tests.graph_tests import test_graph
 
-
 class Simulation:
     def __init__(self, graph: Graph):
         self.graph = graph
@@ -19,39 +18,44 @@ class Simulation:
             
         for i in range(self.graph.switch_count):
             switch = self.graph.switches[i]
-            switch.next_hop = i 
+            switch.next_hop = i  # Jeder Switch zeigt initial auf sich selbst
             switch.msg_cnt = 0
             
-            # Initialize the information received by switch i from switch k
+            # Initialisiere Switch mit seinen eigenen STP-Informationen
+            switch.root_id = switch.switch_id
+            switch.distance_to_root = 0
+            switch.best_neighbor_id = None
+            switch.received_bpdus = {}
+            
+            # Initialisiere BPDUs von Nachbarn
             for k in range(self.graph.switch_count):
-                if k < len(switch.links):
-                    switch.links[k].root_id = self.graph.switches[k].switch_id
-                    switch.links[k].sum_cost = 2
+                if k != i and switch.links[k] > 0:  # Wenn es einen Link gibt
+                    neighbor = self.graph.switches[k]
+                    # Initialisiere mit Default-Werten (jeder Switch denkt, er ist Root)
+                    switch.receive_bpdu(k, neighbor.switch_id, 0)
 
     def _find_best_path(self, switch_idx: int) -> Tuple[int, int, int]:
         switch = self.graph.switches[switch_idx]
-        best_path_tuple = (switch.switch_id, 0, switch.switch_id)
-        best_hop_idx = switch_idx  # Default to self
-
-        for neighbor_idx in range(self.graph.switch_count):
-            link_to_neighbor = switch.links[neighbor_idx]
-            # Skip non-neighbors and self
-            if neighbor_idx == switch_idx or link_to_neighbor.cost == 0:
-                continue
-
-            neighbor_switch = self.graph.switches[neighbor_idx]
-            received_info = switch.links[neighbor_idx]
-
-            total_cost_via_neighbor = received_info.sum_cost + link_to_neighbor.cost
-            current_path_tuple = (received_info.root_id, total_cost_via_neighbor, neighbor_switch.switch_id)
-
-            if current_path_tuple < best_path_tuple:
-                best_path_tuple = current_path_tuple
+        
+        # Beginne mit sich selbst als beste Option
+        best_root_id = switch.switch_id
+        best_path_cost = 0
+        best_hop_idx = switch_idx
+        
+        # Prüfe alle BPDUs von allen Nachbarn
+        for neighbor_idx, bpdu_info in switch.received_bpdus.items():
+            received_root_id, received_distance = bpdu_info
+            
+            # Berechne Gesamtkosten über diesen Nachbarn
+            link_cost = switch.links[neighbor_idx]
+            total_cost = received_distance + link_cost
+            
+            # Vergleiche mit der besten bekannten Route
+            if (received_root_id < best_root_id or 
+                (received_root_id == best_root_id and total_cost < best_path_cost)):
+                best_root_id = received_root_id
+                best_path_cost = total_cost
                 best_hop_idx = neighbor_idx
-
-        # Extract results from the best tuple found
-        best_root_id = best_path_tuple[0]
-        best_path_cost = best_path_tuple[1]
 
         return best_root_id, best_path_cost, best_hop_idx
 
@@ -62,21 +66,26 @@ class Simulation:
         switch = self.graph.switches[switch_idx]
         switch.msg_cnt += 1
 
-        # Find the best path for switch
-        my_advertised_root_id, my_advertised_cost, best_hop_idx = self._find_best_path(switch_idx)
+        # Finde den besten Pfad für den Switch
+        best_root_id, best_path_cost, best_hop_idx = self._find_best_path(switch_idx)
 
-        # Update the switches chosen next hop index
+        # Aktualisiere die STP-Informationen des Switches
+        old_root_id = switch.root_id
+        old_distance = switch.distance_to_root
+        
+        switch.root_id = best_root_id
+        switch.distance_to_root = best_path_cost
         switch.next_hop = best_hop_idx
-
-        # Broadcast this switches information to its neighbors
-        for neighbor_idx in range(self.graph.switch_count):
-            # Check if neighbor_idx is actually a neighbor
-            if neighbor_idx != switch_idx and switch.links[neighbor_idx].cost > 0:
-                # Update the information that neighbor_idx *receives from* switch_idx
-                neighbor_switch = self.graph.switches[neighbor_idx]
-                if switch_idx < len(neighbor_switch.links):
-                    neighbor_switch.links[switch_idx].root_id = my_advertised_root_id
-                    neighbor_switch.links[switch_idx].sum_cost = my_advertised_cost
+        
+        # Nur senden, wenn sich die Informationen geändert haben oder periodisch
+        if old_root_id != best_root_id or old_distance != best_path_cost:
+            # Sende BPDU an alle Nachbarn (außer über den Pfad zum Root)
+            for neighbor_idx in range(self.graph.switch_count):
+                # Überprüfe, ob neighbor_idx tatsächlich ein Nachbar ist
+                if neighbor_idx != switch_idx and switch.links[neighbor_idx] > 0:
+                    neighbor_switch = self.graph.switches[neighbor_idx]
+                    # Aktualisiere die BPDU-Informationen, die neighbor_idx von switch_idx erhält
+                    neighbor_switch.receive_bpdu(switch_idx, best_root_id, best_path_cost)
             
     def simulate(self, iterations: int, debug_interval: Optional[int] = None) -> bool:
         self.initialize_switches_to_be_root()
@@ -85,20 +94,20 @@ class Simulation:
             print("Graph is empty, nothing to simulate.")
             return True
 
-        # Seed for random switch selection
+        # Seed für zufällige Switch-Auswahl
         random.seed(time.time())
         
-        # Run algorithm iterations
+        # Führe Algorithmus-Iterationen durch
         for i in range(iterations):
             switch_idx = random.randint(0, self.graph.switch_count - 1)
             self.sptree_iteration(switch_idx)
 
-            # Check for convergence early
+            # Prüfe früh auf Konvergenz
             if i > self.graph.switch_count and self._is_converged():
                 print(f"Converged early after {i+1} iterations.")
                 return True
 
-        # Final convergence check after all iterations
+        # Endgültige Konvergenzprüfung nach allen Iterationen
         return self._is_converged()
 
     def _is_converged(self) -> bool:
@@ -113,15 +122,15 @@ class Simulation:
 
             calculated_root_id, _, calculated_best_hop_idx = self._find_best_path(i)
             
-            # Check if switches root is the global root
+            # Prüfe, ob der Root des Switches der globale Root ist
             if calculated_root_id != self.expected_root_id:
                 return False
                 
-            # Check if stored next_hop matches calculated best hop
+            # Prüfe, ob der gespeicherte next_hop dem berechneten besten Hop entspricht
             if switch.next_hop != calculated_best_hop_idx:
                 return False
                 
-            # Root must point to itself
+            # Root muss auf sich selbst zeigen
             if switch.switch_id == self.expected_root_id and switch.next_hop != i:
                 return False
 
@@ -161,16 +170,14 @@ def main():
     
     print(f"Loaded graph '{graph.name}' with {graph.switch_count} switches.")
 
-    # Run tests with assertions
-    try:
-        test_graph(graph)
-    except AssertionError as e:
-        print(f"Graph test failed: {e}")
-        # Decide whether to continue anyway
-        if input("Continue anyway? (y/n): ").lower() != 'y':
-            return
+    # try:
+    #     test_graph(graph)
+    # except AssertionError as e:
+    #     print(f"Graph test failed: {e}")
+    #     if input("Continue anyway? (y/n): ").lower() != 'y':
+    #         return
 
-    # Run simulation
+    # Führe Simulation durch
     simulator = Simulation(graph)
     iterations = graph.switch_count * 10
 

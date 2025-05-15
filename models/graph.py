@@ -39,6 +39,6 @@ class Graph:
             print(f"Error: Switch not found for link {from_name}-{to_name}.")
             return
 
-        self.switches[from_idx].links[to_idx].cost = cost
-        self.switches[to_idx].links[from_idx].cost = cost
+        self.switches[from_idx].links[to_idx] = cost  # Jetzt direkt Kosten speichern
+        self.switches[to_idx].links[from_idx] = cost
         return 
