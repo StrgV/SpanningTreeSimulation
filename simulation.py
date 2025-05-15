@@ -1,9 +1,11 @@
 import random
 import time
-from typing import Dict, List, Tuple, Optional
+from typing import Tuple, Optional
 from util.graph_parser import GraphParser
 from models.graph import Graph
 from tests.graph_tests import test_graph
+
+MAX_MSG_PER_SWITCH = 10
 
 class Simulation:
     def __init__(self, graph: Graph):
@@ -60,8 +62,6 @@ class Simulation:
         return best_root_id, best_path_cost, best_hop_idx
 
     def sptree_iteration(self, switch_idx: int):
-        if not (0 <= switch_idx < self.graph.switch_count):
-            return
 
         switch = self.graph.switches[switch_idx]
         switch.msg_cnt += 1
@@ -87,53 +87,22 @@ class Simulation:
                     # Aktualisiere die BPDU-Informationen, die neighbor_idx von switch_idx erhält
                     neighbor_switch.receive_bpdu(switch_idx, best_root_id, best_path_cost)
             
-    def simulate(self, iterations: int, debug_interval: Optional[int] = None) -> bool:
+    def simulate(self):
         self.initialize_switches_to_be_root()
-        
-        if self.graph.switch_count == 0:
-            print("Graph is empty, nothing to simulate.")
-            return True
-
         # Seed für zufällige Switch-Auswahl
         random.seed(time.time())
         
         # Führe Algorithmus-Iterationen durch
-        for i in range(iterations):
+        while not self.all_switches_sent_enough_messages(MAX_MSG_PER_SWITCH):
             switch_idx = random.randint(0, self.graph.switch_count - 1)
             self.sptree_iteration(switch_idx)
 
-            # Prüfe früh auf Konvergenz
-            if i > self.graph.switch_count and self._is_converged():
-                print(f"Converged early after {i+1} iterations.")
-                return True
-
-        # Endgültige Konvergenzprüfung nach allen Iterationen
-        return self._is_converged()
-
-    def _is_converged(self) -> bool:
-        if self.graph.switch_count == 0:
-            return True
-
-        if self.expected_root_id is None:
-            self.expected_root_id = min(switch.switch_id for switch in self.graph.switches)
-
-        for i in range(self.graph.switch_count):
-            switch = self.graph.switches[i]
-
-            calculated_root_id, _, calculated_best_hop_idx = self._find_best_path(i)
-            
-            # Prüfe, ob der Root des Switches der globale Root ist
-            if calculated_root_id != self.expected_root_id:
+        return True
+    
+    def all_switches_sent_enough_messages(self, min_messages: int) -> bool:
+        for switch in self.graph.switches:
+            if switch.msg_cnt < min_messages:
                 return False
-                
-            # Prüfe, ob der gespeicherte next_hop dem berechneten besten Hop entspricht
-            if switch.next_hop != calculated_best_hop_idx:
-                return False
-                
-            # Root muss auf sich selbst zeigen
-            if switch.switch_id == self.expected_root_id and switch.next_hop != i:
-                return False
-
         return True
 
     def print_spanning_tree(self):
@@ -142,10 +111,6 @@ class Simulation:
             if switch.next_hop == i:
                 root_idx = i
                 break
-        
-        if root_idx == -1:
-            print("Error: No root switch found (no switch points to itself)! STP did not converge correctly.")
-            return
         
         root_switch = self.graph.switches[root_idx]
         print(f"\nSpanning-Tree of {self.graph.name} {{")
@@ -170,24 +135,20 @@ def main():
     
     print(f"Loaded graph '{graph.name}' with {graph.switch_count} switches.")
 
-    # try:
-    #     test_graph(graph)
-    # except AssertionError as e:
-    #     print(f"Graph test failed: {e}")
-    #     if input("Continue anyway? (y/n): ").lower() != 'y':
-    #         return
+    try:
+        test_graph(graph)
+    except AssertionError as e:
+        print(f"Graph test failed: {e}")
+        if input("Continue anyway? (y/n): ").lower() != 'y':
+            return
 
     # Führe Simulation durch
     simulator = Simulation(graph)
-    iterations = graph.switch_count * 10
 
-    print(f"\nStarting simulation for {iterations} iterations...")
+    print(f"Simulating until every switch sent {MAX_MSG_PER_SWITCH} messages...")
     
-    if simulator.simulate(iterations):
-        print("\nSpanning tree algorithm converged!")
-        simulator.print_spanning_tree()
-    else:
-        print(f"\nSpanning tree algorithm did NOT converge after {iterations} iterations.")
-
+    simulator.simulate()
+    simulator.print_spanning_tree()
+    
 if __name__ == "__main__":
     main()

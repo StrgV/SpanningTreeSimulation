@@ -1,7 +1,6 @@
 from typing import Optional
 from models.graph import Graph
 
-
 # Constants
 MAX_IDENT = 20
 MAX_ITEMS = 100
@@ -57,9 +56,10 @@ class GraphParser:
                             continue
                         
                         graph.append_switch(switch_name, switch_id)
-                    
-                    # Store links
+
+
                     elif "-" in line and ":" in line and ";" in line:
+                        # Add links
                         parts = line.split("-")
                         switch1_name = parts[0].strip()
                         

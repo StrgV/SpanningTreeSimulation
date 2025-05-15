@@ -1,8 +1,7 @@
-from typing import List
 from .switch import Switch
 
 class Graph:
-    def __init__(self, name: str = ""):
+    def __init__(self, name: str):
         self.name = name
         self.switches = []  
         self.switch_count = 0
@@ -12,17 +11,14 @@ class Graph:
         return self.name_to_index.get(name, -1)
     
     def append_switch(self, name: str, switch_id: int):
-        # Check if switch exists already
-        if name in self.name_to_index:
-            return self.switch_count
         
         new_switch = Switch(name, switch_id)
         
-        # Initialize links for existing switches (column)
+        # Links für existierende Switches initialisieren (Spalte)
         for switch in self.switches:
             switch.add_link()
         
-        # Initialize links for new switch (row)
+        # Links für neuen Switch initialisieren (Zeile)
         for _ in range(self.switch_count + 1):
             new_switch.add_link()
         
@@ -39,6 +35,6 @@ class Graph:
             print(f"Error: Switch not found for link {from_name}-{to_name}.")
             return
 
-        self.switches[from_idx].links[to_idx] = cost  # Jetzt direkt Kosten speichern
+        self.switches[from_idx].links[to_idx] = cost
         self.switches[to_idx].links[from_idx] = cost
         return 
