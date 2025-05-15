@@ -1,7 +1,7 @@
 import random
 import time
 from typing import Dict, List, Tuple, Optional
-from graph_parser import GraphParser
+from util.graph_parser import GraphParser
 from models.graph import Graph
 from tests.graph_tests import test_graph
 
@@ -55,8 +55,7 @@ class Simulation:
 
         return best_root_id, best_path_cost, best_hop_idx
 
-    def sptree(self, switch_idx: int):
-        """Performs one STP step for the given switch."""
+    def sptree_iteration(self, switch_idx: int):
         if not (0 <= switch_idx < self.graph.switch_count):
             return
 
@@ -92,7 +91,7 @@ class Simulation:
         # Run algorithm iterations
         for i in range(iterations):
             switch_idx = random.randint(0, self.graph.switch_count - 1)
-            self.sptree(switch_idx)
+            self.sptree_iteration(switch_idx)
 
             # Check for convergence early
             if i > self.graph.switch_count and self._is_converged():
@@ -161,7 +160,6 @@ def main():
         return
     
     print(f"Loaded graph '{graph.name}' with {graph.switch_count} switches.")
-    graph.print_topology()
 
     # Run tests with assertions
     try:
